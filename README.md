@@ -305,6 +305,43 @@ This is exactly the kind of environment that bridges **research** (can RL agents
 
 ---
 
+## 🧠 Why This Environment is Hard for LLMs
+
+Even frontier models (GPT-4, Qwen-72B) struggle here. Here's why:
+
+### 1️⃣ Multi-Step Reasoning Required
+A single ticket contains layered signals — the agent must identify the *type* of issue, the *urgency*, the *correct response tone*, and whether a *human should intervene*, all from unstructured text. Getting any one wrong fails the task.
+
+### 2️⃣ Constraint Satisfaction (Keyword Grading)
+The `full_resolution` task requires the reply to contain **specific keyword phrases** (e.g. `"sorry"`, `"refund"`, `"investigate"`). The model cannot just write a fluent reply — it must satisfy hard constraints while sounding natural. This is the same challenge as meeting SLA language requirements in real ops.
+
+```
+# Agent reply that SCORES 0.70 (missing "sorry"):
+"We will process a refund for the duplicate charge."
+
+# Agent reply that SCORES 1.00 (all constraints met):
+"We are sorry for the inconvenience. We will process a refund for the duplicate charge."
+```
+
+### 3️⃣ Escalation Judgment (Novel Reasoning Task)
+The `escalation_detection` task has **no pattern that can be memorized**. The agent must reason:
+
+| Signal | Escalate? | Why |
+|--------|-----------|-----|
+| `"cancel my subscription"` | ❌ No | Routine, self-serve |
+| `"I was charged twice"` | ✅ Yes | Financial dispute |
+| `"update my credit card"` | ❌ No | Account management |
+| `"hacked — unauthorized purchases"` | ✅ Yes | Security incident |
+| `"I need a 2024 invoice"` | ❌ No | Routine billing |
+| `"our company was acquired"` | ✅ Yes | Legal/ownership risk |
+
+This requires genuine understanding of business context, legal risk, and operational process — not keyword matching.
+
+### 4️⃣ Stagnation Trap
+If the model repeats the same wrong answer, its score stays stuck. The environment actively penalizes looping behavior, which means an agent must genuinely *explore* alternative actions — exactly the behavior RL training is designed to enable.
+
+---
+
 ## 📜 License
 
 BSD-3-Clause · Aligned with OpenEnv framework standards.
