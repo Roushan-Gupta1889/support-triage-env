@@ -293,22 +293,24 @@ class SupportTriageEnvironment(Environment):
         self._last_partial = max(self._last_partial, partial)
 
         score = final_grader(self._task, self._submission, self._ticket)
-        self._state.last_grader_score = score
+        # Clamp for external consumers — validator rejects exact 0.0/1.0
+        exposed_score = max(0.01, min(0.99, score))
+        self._state.last_grader_score = exposed_score
 
         done = False
         if self._state.step_count >= self._max_steps:
             done = True
-        if score >= 0.999:
+        if score >= 0.999:  # use unclamped score for done detection
             done = True
 
         if done:
-            self._state.last_grader_score = score
+            self._state.last_grader_score = exposed_score
             obs = self._build_obs(
                 reward=step_reward,
                 done=True,
-                feedback=f"Episode finished. Grader={score:.3f}. {fb}",
+                feedback=f"Episode finished. Grader={exposed_score:.3f}. {fb}",
                 last_error=None,
-                grader_score=score,
+                grader_score=exposed_score,
             )
             return obs
 
