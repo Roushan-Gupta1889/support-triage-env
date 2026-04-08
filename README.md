@@ -57,6 +57,43 @@ Current LLMs, even frontier models, struggle to:
 
 ---
 
+## 🧪 Example Run
+
+> **Ticket:** `"I was charged twice this month for my Pro subscription. Please fix and refund the duplicate."`
+
+The agent runs through all 4 tasks and the environment gives it real-time, step-by-step feedback:
+
+```
+[START] task=ticket_category env=support_triage_env model=Qwen/Qwen2.5-72B-Instruct
+[STEP]  step=1 action={"category":"billing"} reward=1.00 done=true  error=null
+[END]   success=true steps=1 score=1.00 rewards=1.00
+
+[START] task=ticket_priority env=support_triage_env model=Qwen/Qwen2.5-72B-Instruct
+[STEP]  step=1 action={"category":"billing","priority":"high"} reward=1.00 done=true error=null
+[END]   success=true steps=1 score=1.00 rewards=1.00
+
+[START] task=full_resolution env=support_triage_env model=Qwen/Qwen2.5-72B-Instruct
+[STEP]  step=1 action={"category":"billing","priority":"high","reply":"We will refund the duplicate."} reward=0.70 done=false error=null
+        ↳ feedback: "reply_keywords 1/2; missing phrases: ['sorry'] — add these to your reply"
+[STEP]  step=2 action={"category":"billing","priority":"high","reply":"We are sorry; we will refund the duplicate charge."} reward=1.00 done=true error=null
+[END]   success=true steps=2 score=1.00 rewards=0.70,1.00
+
+[START] task=escalation_detection env=support_triage_env model=Qwen/Qwen2.5-72B-Instruct
+[STEP]  step=1 action={"category":"billing","priority":"high","escalate":"yes"} reward=1.00 done=true error=null
+[END]   success=true steps=1 score=1.00 rewards=1.00
+```
+
+| Field | Value | Why |
+|-------|-------|-----|
+| **Category** | `billing` | Charge/refund = billing issue |
+| **Priority** | `high` | Double charge = financial loss, urgent |
+| **Reply** | must include `sorry` + `refund` | Environment enforces resolution keywords |
+| **Escalate** | `yes` | Financial disputes require human review |
+
+**The agent gets corrective feedback at every step** — not just at the end. This is what makes it ideal for RL training.
+
+---
+
 ## 🏆 Advanced Features
 
 ### 🎯 Multi-Task RL Environment
