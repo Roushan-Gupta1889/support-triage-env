@@ -1,4 +1,4 @@
-"""Deterministic task graders mapping submissions to scores in [0.0, 1.0]."""
+"""Deterministic task graders mapping submissions to scores in (0, 1) exclusive."""
 
 from __future__ import annotations
 
@@ -16,6 +16,11 @@ def _norm(s: str | None) -> str:
     if s is None:
         return ""
     return s.strip().lower()
+
+
+def _clamp(score: float) -> float:
+    """Clamp score to open interval (0, 1) — validator rejects exact 0.0 and 1.0."""
+    return max(0.01, min(0.99, score))
 
 
 def _parse_keywords(s: str) -> List[str]:
@@ -66,17 +71,17 @@ def grade_partial(
     if task == "ticket_category":
         s = submission.get("category")
         if s is None or _norm(s) == "":
-            return 0.0, "Provide category."
+            return _clamp(0.0), "Provide category."
         if _norm(s) not in VALID_CATEGORIES:
-            return 0.05, f"Invalid category; use one of: {list(VALID_CATEGORIES)}."
+            return _clamp(0.05), f"Invalid category; use one of: {list(VALID_CATEGORIES)}."
         g = grade_ticket_category(submission, ground_truth)
-        return g, "Category correct." if g >= 1.0 else "Category does not match ticket."
+        return _clamp(g), "Category correct." if g >= 1.0 else "Category does not match ticket."
 
     if task == "ticket_priority":
         has_c = bool(submission.get("category") and _norm(submission.get("category")))
         has_p = bool(submission.get("priority") and _norm(submission.get("priority")))
         if not has_c and not has_p:
-            return 0.0, "Submit category and/or priority."
+            return _clamp(0.0), "Submit category and/or priority."
         score = 0.0
         parts: List[str] = []
         if has_c:
@@ -91,7 +96,7 @@ def grade_partial(
                 ok = pr == _norm(ground_truth.get("priority"))
                 score += 0.5 * (1.0 if ok else 0.0)
                 parts.append("priority ok" if ok else "priority mismatch")
-        return min(1.0, score), "; ".join(parts)
+        return _clamp(score), "; ".join(parts)
 
     if task == "escalation_detection":
         parts = []
@@ -116,8 +121,8 @@ def grade_partial(
             else:
                 parts.append(f"invalid escalate value; use 'yes' or 'no'")
         if not parts:
-            return 0.0, "Provide category, priority, and/or escalate (yes/no)."
-        return min(1.0, total), "; ".join(parts)
+            return _clamp(0.0), "Provide category, priority, and/or escalate (yes/no)."
+        return _clamp(total), "; ".join(parts)
 
     # full_resolution — weights match grade_full_resolution: 0.35 / 0.35 / 0.30
     parts = []
@@ -147,8 +152,8 @@ def grade_partial(
                 kw_msg += "; all keywords present"
             parts.append(kw_msg)
     if not parts:
-        return 0.0, "Provide category, priority, and/or reply."
-    return min(1.0, total), "; ".join(parts)
+        return _clamp(0.0), "Provide category, priority, and/or reply."
+    return _clamp(total), "; ".join(parts)
 
 
 def grade_escalation_detection(submission: Dict[str, Any], ground_truth: Dict[str, Any]) -> float:
@@ -164,12 +169,12 @@ def grade_escalation_detection(submission: Dict[str, Any], ground_truth: Dict[st
 
 def final_grader(task: TaskName, submission: Dict[str, Any], ground_truth: Dict[str, Any]) -> float:
     if task == "ticket_category":
-        return grade_ticket_category(submission, ground_truth)
+        return _clamp(grade_ticket_category(submission, ground_truth))
     if task == "ticket_priority":
-        return grade_ticket_priority(submission, ground_truth)
+        return _clamp(grade_ticket_priority(submission, ground_truth))
     if task == "escalation_detection":
-        return grade_escalation_detection(submission, ground_truth)
-    return grade_full_resolution(submission, ground_truth)
+        return _clamp(grade_escalation_detection(submission, ground_truth))
+    return _clamp(grade_full_resolution(submission, ground_truth))
 
 
 def normalize_submission_payload(raw: Dict[str, Any]) -> Dict[str, Any]:
