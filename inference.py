@@ -73,7 +73,7 @@ def log_step(
 def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> None:
     rstr = ",".join(f"{r:.2f}" for r in rewards)
     print(
-        f"[END] success={str(success).lower()} steps={steps} score={score:.2f} rewards={rstr}",
+        f"[END] success={str(success).lower()} steps={steps} score={score:.3f} rewards={rstr}",
         flush=True,
     )
 
@@ -89,20 +89,24 @@ SYSTEM_PROMPT = textwrap.dedent(
     RULES:
     1. Respond with EXACTLY ONE JSON object — no markdown, no extra text.
     2. Valid category values: billing, technical, account
-       - billing: invoices, charges, refunds, payments
-       - technical: bugs, errors, API issues, login problems
-       - account: profile changes, email updates, contact info, access management
     3. Valid priority values: low, medium, high
+       - If you don't know the priority, USE YOUR TOOLS first! 
+       - Tool: {"tool_call": "check_customer_tier", "tool_args": "{\\"customer_id\\": \\"CUST-XXXX\\"}"} 
+       - Tool: {"tool_call": "check_system_status", "tool_args": "{}"}
     4. For escalation_detection task, also include "escalate": "yes" or "no"
        Escalate to human (yes) when: security breach, production outage for many users,
        financial disputes, legal/ownership transfers, or compliance deadlines.
+       Enterprise customers usually require escalation for non-trivial issues.
     5. IMPORTANT: After each step you receive feedback. If feedback says your answer
        is WRONG or earns no reward, you MUST try a DIFFERENT value next turn.
        NEVER repeat a value that has already been rejected.
-    6. Read the ticket body carefully. Base your answer on the NATURE of the request,
-       not on keywords in email addresses or company names.
+    6. If you invoke a tool_call, DO NOT output category/priority in the same step.
+    7. Base your answer on the NATURE of the request and the tool feedback.
 
-    Example outputs:
+    Example tool call:
+      {"tool_call": "check_customer_tier", "tool_args": "{\\"customer_id\\": \\"CUST-1234\\"}"}
+
+    Example final outputs:
       Simple: {"category":"account","priority":"low"}
       With reply: {"category":"billing","priority":"high","reply":"We are sorry; we will refund you."}
       With escalation: {"category":"technical","priority":"high","escalate":"yes"}
@@ -204,8 +208,8 @@ class EpisodeAgent:
                 max_tokens=MAX_TOKENS,
             )
             text = (comp.choices[0].message.content or "").strip()
-        except Exception as exc:
-            print(f"[DEBUG] model error: {exc}", flush=True)
+        except Exception:
+            # Silently fallback per hackathon stdout rules, no debug prints allowed.
             text = '{"category":"technical","priority":"medium"}'
 
         # Track stagnation
@@ -224,6 +228,8 @@ class EpisodeAgent:
             priority=data.get("priority"),
             reply=data.get("reply"),
             escalate=data.get("escalate"),
+            tool_call=data.get("tool_call"),
+            tool_args=data.get("tool_args"),
         )
 
 
@@ -239,6 +245,12 @@ def action_to_log_str(action: SupportTriageAction) -> str:
         d["priority"] = action.priority
     if action.reply is not None:
         d["reply"] = action.reply
+    if action.escalate is not None:
+        d["escalate"] = action.escalate
+    if action.tool_call is not None:
+        d["tool_call"] = action.tool_call
+    if action.tool_args is not None:
+        d["tool_args"] = action.tool_args
     raw = json.dumps(d, ensure_ascii=False)
     raw = re.sub(r"\s+", " ", raw)
     return raw[:500]
@@ -302,8 +314,8 @@ async def run_one_task(client: OpenAI, task: str) -> None:
                     success = score >= SUCCESS_THRESHOLD
                     break
 
-    except Exception as exc:
-        print(f"[DEBUG] episode error: {exc}", flush=True)
+    except Exception:
+        # Silently fail episode per hackathon stdout rules
         success = False
         score = 0.0
     finally:

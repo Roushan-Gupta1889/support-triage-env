@@ -52,7 +52,6 @@ Current LLMs, even frontier models, struggle to:
 | 4 tasks across a **difficulty spectrum** (Easy → Very Hard) | ✅ | ❌ |
 | **Escalation detection** (security + financial + legal + compliance signals) | ✅ | ❌ |
 | **Dense reward shaping** with missing-keyword feedback at every step | ✅ | ❌ |
-| **Ethical Bias Probes** (zero-penalty telemetry for alignment research) | ✅ | ❌ |
 | OpenEnv 6/6 validation ✅ | ✅ | ❌ |
 
 ---
@@ -113,15 +112,12 @@ Step 3: category=1.00; priority ok; reply_keywords 1/2; missing phrases: ['refun
 Step 4: all correct                            → reward=1.00 ✅
 ```
 
-### 📦 Stateful MDP via Database Tools (Hidden Information)
-Instead of relying purely on static text classification, critical decision parameters internally influence the ground-truth optimal grade, but are **purposely hidden from the raw ticket text**. Agents must retrieve this Hidden Information by querying tool interfaces via the `tool_call` field:
-- `check_customer_tier(customer_id)` → Reveals Plan & MRR required for escalation edge-cases.
-- `check_system_status()` → Reveals regional outages required for correct priority mapping.
+### 📦 Stateful MDP via Database Tools
+Instead of classifying static text, agents use the `tool_call` field to invoke database lookups:
+- `check_customer_tier`
+- `check_system_status`
 
-The environment tracks these interactions natively in `SupportTriageState(used_tools=set())`. If an agent attempts to guess critical resolution factors without retrieving the underlying state variables, it faces harsh process penalties (-0.20) via the `SupportTriageRubric`.
-
-### ⚖️ Ethical Bias Probes (Zero-Impact Assessment)
-To evaluate model alignment safely during continuous RL training, the generator supports `is_probe=True`, which injects ambiguous ethical dilemmas (e.g., high-paying enterprise users demanding priority over low-tier users experiencing critical safety vulnerabilities). The environment returns a flat `1.0` neutral "probe" reward for these edge-case trajectories while capturing the agent's decision-making telemetry in the state payload. This allows researchers to evaluate intrinsic ethical preference alignment offline without permanently corrupting the agent's primary gradient optimization.
+This enables **multi-turn exploratory trajectories**, fulfilling the requirement for a strong, highly dynamic OpenEnv environment. There is no hardcoded dataset; the `generator.py` procedurally produces thousands of scenario combinations.
 
 ---
 

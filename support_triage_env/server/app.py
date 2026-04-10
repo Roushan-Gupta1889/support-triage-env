@@ -11,7 +11,7 @@ try:
 except ImportError:
     # fallback (local dev)
     from models import SupportTriageAction, SupportTriageObservation
-    from support_triage_env.server.triage_environment import SupportTriageEnvironment
+    from server.triage_environment import SupportTriageEnvironment
 
 app = create_app(
     SupportTriageEnvironment,

@@ -28,152 +28,14 @@ from .graders import (
     merge_submission,
     submission_to_json,
 )
-
-# Fixed corpus — deterministic grading (no external data).
-# 15 diverse real-world support tickets across billing, technical, account.
-TICKET_CORPUS: List[Dict[str, Any]] = [
-    {
-        "id": "TK-1001",
-        "subject": "Double charge on Pro plan",
-        "body": "I was billed twice this month for the Pro subscription. Please fix and refund the duplicate.",
-        "category": "billing",
-        "priority": "high",
-        "reply_keywords": "sorry, refund",
-        "requires_escalation": True,  # financial dispute — needs human
-    },
-    {
-        "id": "TK-1002",
-        "subject": "Cannot log in after password reset",
-        "body": "The login page returns an error after I reset my password. I need access today.",
-        "category": "technical",
-        "priority": "medium",
-        "reply_keywords": "sorry, troubleshoot",
-        "requires_escalation": False,
-    },
-    {
-        "id": "TK-1003",
-        "subject": "Update billing email address",
-        "body": "Please change my billing contact email from old@corp.com to new@corp.com.",
-        "category": "account",
-        "priority": "low",
-        "reply_keywords": "confirm, updated",
-        "requires_escalation": False,
-    },
-    {
-        "id": "TK-1004",
-        "subject": "Invoice PDF missing line items",
-        "body": "Last invoice PDF is blank for line items. Need a corrected invoice for accounting.",
-        "category": "billing",
-        "priority": "medium",
-        "reply_keywords": "invoice, apologize",
-        "requires_escalation": False,
-    },
-    {
-        "id": "TK-1005",
-        "subject": "API RATE LIMITS BLOCKING PRODUCTION — CRITICAL",
-        "body": "Our integration has been hitting 429 errors since yesterday. THIS IS DOWN IN PRODUCTION FOR 500 CUSTOMERS. We need an emergency exemption NOW.",
-        "category": "technical",
-        "priority": "high",
-        "reply_keywords": "investigate, sorry",
-        "requires_escalation": True,  # production outage + large customer
-    },
-    {
-        "id": "TK-1006",
-        "subject": "Request for annual invoice for tax purposes",
-        "body": "Could you please send me an annual summary invoice for 2024 for our tax filing?",
-        "category": "billing",
-        "priority": "low",
-        "reply_keywords": "confirm, send",
-        "requires_escalation": False,
-    },
-    {
-        "id": "TK-1007",
-        "subject": "Account hacked — unauthorized transactions",
-        "body": "URGENT: Someone has accessed my account and made unauthorized purchases. I need this stopped immediately and all charges reversed.",
-        "category": "account",
-        "priority": "high",
-        "reply_keywords": "sorry, secure, refund",
-        "requires_escalation": True,  # security incident
-    },
-    {
-        "id": "TK-1008",
-        "subject": "Slow dashboard load times",
-        "body": "My dashboard takes 15-20 seconds to load, started about 3 days ago. Other pages are fine.",
-        "category": "technical",
-        "priority": "medium",
-        "reply_keywords": "investigate, sorry",
-        "requires_escalation": False,
-    },
-    {
-        "id": "TK-1009",
-        "subject": "Cancel subscription and refund remaining balance",
-        "body": "I'd like to cancel my annual subscription effective immediately and request a prorated refund for the unused months.",
-        "category": "billing",
-        "priority": "medium",
-        "reply_keywords": "confirm, refund",
-        "requires_escalation": False,
-    },
-    {
-        "id": "TK-1010",
-        "subject": "Add team members to our enterprise account",
-        "body": "We need to add 5 new team members to our Enterprise plan. Please advise on the process.",
-        "category": "account",
-        "priority": "low",
-        "reply_keywords": "confirm, assist",
-        "requires_escalation": False,
-    },
-    {
-        "id": "TK-1011",
-        "subject": "Data export failing with timeout error",
-        "body": "When I try to export our 3-year dataset the job fails after 30 minutes with a timeout. We have a compliance deadline next week.",
-        "category": "technical",
-        "priority": "high",
-        "reply_keywords": "investigate, sorry",
-        "requires_escalation": True,  # compliance deadline
-    },
-    {
-        "id": "TK-1012",
-        "subject": "Wrong plan tier charged this month",
-        "body": "I was charged for Business tier but I downgraded to Starter last month. Please correct and refund the difference.",
-        "category": "billing",
-        "priority": "medium",
-        "reply_keywords": "sorry, refund",
-        "requires_escalation": False,
-    },
-    {
-        "id": "TK-1013",
-        "subject": "Request to transfer account ownership",
-        "body": "Our company was acquired. I need to transfer the account owner from john@oldco.com to sarah@newco.com and update all billing details.",
-        "category": "account",
-        "priority": "medium",
-        "reply_keywords": "confirm, assist",
-        "requires_escalation": True,  # ownership transfer — legal/security risk
-    },
-    {
-        "id": "TK-1014",
-        "subject": "Webhook delivery failures",
-        "body": "Our webhooks stopped arriving about 2 hours ago. We have checked our endpoint and it is returning 200 OK. Please investigate your delivery system.",
-        "category": "technical",
-        "priority": "high",
-        "reply_keywords": "investigate, sorry",
-        "requires_escalation": False,
-    },
-    {
-        "id": "TK-1015",
-        "subject": "How do I update my credit card?",
-        "body": "I got a new credit card and need to update payment method before next billing cycle.",
-        "category": "account",
-        "priority": "low",
-        "reply_keywords": "confirm, assist",
-        "requires_escalation": False,
-    },
-]
+from .rubrics import SupportTriageRubric
+from .generator import TicketGenerator
 
 TASK_MAX_STEPS: Dict[str, int] = {
-    "ticket_category": 6,
-    "ticket_priority": 10,
-    "full_resolution": 14,
-    "escalation_detection": 8,
+    "ticket_category": 10,
+    "ticket_priority": 14,
+    "full_resolution": 20,
+    "escalation_detection": 16,
 }
 
 
@@ -185,9 +47,11 @@ class SupportTriageEnvironment(Environment):
 
     def __init__(self) -> None:
         super().__init__()
+        self._generator = TicketGenerator(seed=0)
+        self._rubric = SupportTriageRubric()
         self._state = SupportTriageState(episode_id=str(uuid.uuid4()), step_count=0)
         self._task: TaskName = "ticket_category"
-        self._ticket: Dict[str, Any] = TICKET_CORPUS[0]
+        self._ticket: Dict[str, Any] = self._generator.generate_ticket()
         self._submission: Dict[str, Any] = {}
         self._last_partial: float = 0.0
         self._max_steps: int = 6
@@ -206,12 +70,15 @@ class SupportTriageEnvironment(Environment):
             task = "ticket_category"
         self._task = _coerce_task(str(task))
 
-        idx = 0
+        seed_to_use = 0
         if seed is not None:
-            idx = int(seed) % len(TICKET_CORPUS)
+            seed_to_use = int(seed)
         elif "ticket_index" in kwargs and kwargs["ticket_index"] is not None:
-            idx = int(kwargs["ticket_index"]) % len(TICKET_CORPUS)
-        self._ticket = TICKET_CORPUS[idx]
+            seed_to_use = int(kwargs["ticket_index"])
+            
+        self._generator = TicketGenerator(seed=seed_to_use)
+        is_probe = kwargs.get("is_probe", False)
+        self._ticket = self._generator.generate_ticket(is_probe=is_probe)
 
         self._submission = {}
         self._last_partial = 0.0
@@ -273,13 +140,38 @@ class SupportTriageEnvironment(Environment):
         self._state.step_count += 1
         err: Optional[str] = None
 
+        if action.tool_call:
+            tool_name = action.tool_call
+            tool_args = action.tool_args or "{}"
+            if tool_name == "check_customer_tier":
+                self._state.used_tools.add("check_customer_tier")
+                tool_output = self._generator.tool_check_customer_tier(tool_args)
+            elif tool_name == "check_system_status":
+                self._state.used_tools.add("check_system_status")
+                tool_output = self._generator.tool_check_system_status(tool_args)
+            else:
+                tool_output = f"Error: Unknown tool {tool_name}"
+            
+            # Tools provide helpful state progression without ending the episode
+            # We don't artificially increase max score yet, just give them the data.
+            rubric_reward = self._rubric.score_step(False, action, None, self._task, self._submission, self._ticket, self._state)
+            return self._build_obs(
+                reward=0.01,
+                rubric_reward=rubric_reward,
+                done=False,
+                feedback=f"[TOOL OUTPUT] {tool_name}:\n{tool_output}",
+                last_error=None,
+            )
+
         delta = _action_to_delta(action)
         if not delta:
-            err = "Empty action: set at least one of category, priority, reply."
+            err = "Empty action: set at least one of category, priority, reply, escalate, or use a tool_call."
+            rubric_reward = self._rubric.score_step(False, action, err, self._task, self._submission, self._ticket, self._state)
             return self._build_obs(
                 reward=-0.05,
+                rubric_reward=rubric_reward,
                 done=False,
-                feedback="You must submit at least one field.",
+                feedback="You must submit at least one field or tool call.",
                 last_error=err,
             )
 
@@ -303,10 +195,13 @@ class SupportTriageEnvironment(Environment):
         if score >= 0.999:  # use unclamped score for done detection
             done = True
 
+        rubric_reward = self._rubric.score_step(done, action, err, self._task, self._submission, self._ticket, self._state)
+
         if done:
             self._state.last_grader_score = exposed_score
             obs = self._build_obs(
                 reward=step_reward,
+                rubric_reward=rubric_reward,
                 done=True,
                 feedback=f"Episode finished. Grader={exposed_score:.3f}. {fb}",
                 last_error=None,
@@ -316,6 +211,7 @@ class SupportTriageEnvironment(Environment):
 
         return self._build_obs(
             reward=step_reward,
+            rubric_reward=rubric_reward,
             done=False,
             feedback=fb,
             last_error=err,
@@ -324,6 +220,7 @@ class SupportTriageEnvironment(Environment):
     def _build_obs(
         self,
         reward: float,
+        rubric_reward: float,
         done: bool,
         feedback: str,
         last_error: Optional[str],
@@ -335,6 +232,7 @@ class SupportTriageEnvironment(Environment):
         return SupportTriageObservation(
             done=done,
             reward=float(reward),
+            rubric_reward=float(rubric_reward),
             metadata=meta,
             ticket_subject=self._ticket["subject"],
             ticket_body=self._ticket["body"],
