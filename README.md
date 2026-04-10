@@ -21,7 +21,7 @@ tags:
 [![OpenEnv Validated](https://img.shields.io/badge/OpenEnv-6%2F6%20Validated-brightgreen?style=for-the-badge)](https://roushan1889-support-triage-env.hf.space)
 [![HF Space](https://img.shields.io/badge/🤗%20Space-Live-blue?style=for-the-badge)](https://huggingface.co/spaces/Roushan1889/support-triage-env)
 [![4 Tasks](https://img.shields.io/badge/Tasks-4%20Difficulty%20Levels-orange?style=for-the-badge)](#tasks)
-[![15 Tickets](https://img.shields.io/badge/Corpus-15%20Real--World%20Tickets-purple?style=for-the-badge)](#ticket-corpus)
+[![Infinite Corpus](https://img.shields.io/badge/Corpus-Infinite%20Combinations-purple?style=for-the-badge)](#dynamic-scenario-archetypes)
 
 </div>
 
@@ -171,18 +171,18 @@ All scores are deterministic, continuous in [0, 1], and reproducible across seed
 
 ---
 
-## 🧪 Ticket Corpus (15 Real-World Scenarios)
+## 🧪 Dynamic Scenario Archetypes (Infinite Combinations)
 
 | ID | Subject | Category | Priority | Escalate? |
 |----|---------|----------|----------|-----------|
-| TK-1001 | Double charge on Pro plan | billing | high | ✅ Yes |
-| TK-1002 | Cannot log in after password reset | technical | medium | ❌ No |
-| TK-1003 | Update billing email address | account | low | ❌ No |
+| TK-1001 | Double charge on {Plan} plan | billing | dynamic | dynamic |
+| TK-1002 | Cannot log in after password reset | technical | dynamic | ❌ No |
+| TK-1003 | Update billing email address | account | dynamic | ❌ No |
 | TK-1005 | **API RATE LIMITS BLOCKING PRODUCTION — CRITICAL** | technical | high | ✅ Yes |
 | TK-1007 | **Account hacked — unauthorized transactions** | account | high | ✅ Yes |
-| TK-1011 | Data export failing — **compliance deadline next week** | technical | high | ✅ Yes |
-| TK-1013 | Company acquired — account ownership transfer | account | medium | ✅ Yes |
-| ... | *(15 total, spanning billing/technical/account)* | | | |
+| TK-1011 | Data export failing with timeout | technical | dynamic | dynamic |
+| TK-1013 | Request to transfer account ownership | account | dynamic | ✅ Yes |
+| ... | *(Infinite procedural combinations spanning billing/technical/account)* | | | |
 
 Tickets include intentional difficulty: urgency in ALL_CAPS, ambiguous category signals, and routine-vs-sensitive scenarios that require reading the full context.
 
@@ -274,7 +274,7 @@ support-triage-env/
     ├── models.py                        # Action / Observation / State schemas
     └── server/
         ├── app.py                       # FastAPI application
-        ├── triage_environment.py        # Environment logic + 15-ticket corpus
+        ├── triage_environment.py        # Environment logic + infinite procedural generation
         ├── graders.py                   # Deterministic graders (all 4 tasks)
         └── tests/test_graders.py        # Grader unit tests
 ```
