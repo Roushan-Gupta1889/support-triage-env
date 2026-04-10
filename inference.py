@@ -24,12 +24,15 @@ from openai import OpenAI
 from support_triage_env import SupportTriageAction, SupportTriageEnv
 from support_triage_env.server.graders import extract_json_from_text
 
-API_KEY = os.getenv("HF_TOKEN")
-API_BASE_URL = os.getenv("API_BASE_URL") or "https://router.huggingface.co/v1"
-MODEL_NAME = os.getenv("MODEL_NAME") or "Qwen/Qwen2.5-72B-Instruct"
+API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
+HF_TOKEN = os.getenv("HF_TOKEN")
+
+# Optional - if you use from_docker_image():
+LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
+
 BENCHMARK = os.getenv("SUPPORT_TRIAGE_BENCHMARK", "support_triage_env")
-IMAGE_NAME = os.getenv("IMAGE_NAME") or os.getenv("LOCAL_IMAGE_NAME")
-BASE_URL = os.getenv("SUPPORT_TRIAGE_BASE_URL") or "https://roushan1889-support-triage-env.hf.space"
+BASE_URL = os.getenv("SUPPORT_TRIAGE_BASE_URL", "https://roushan1889-support-triage-env.hf.space")
 DEFAULT_TASKS = ("ticket_category", "ticket_priority", "full_resolution", "escalation_detection")
 TASKS = tuple(
     t.strip()
@@ -274,11 +277,11 @@ async def run_one_task(client: OpenAI, task: str) -> None:
         if BASE_URL:
             env = SupportTriageEnv(base_url=BASE_URL.rstrip("/"))
             await env.connect()
-        elif IMAGE_NAME:
-            env = await SupportTriageEnv.from_docker_image(IMAGE_NAME)
+        elif LOCAL_IMAGE_NAME:
+            env = await SupportTriageEnv.from_docker_image(LOCAL_IMAGE_NAME)
         else:
             raise RuntimeError(
-                "Set SUPPORT_TRIAGE_BASE_URL (deployed Space) or IMAGE_NAME for local Docker."
+                "Set SUPPORT_TRIAGE_BASE_URL (deployed Space) or LOCAL_IMAGE_NAME for local Docker."
             )
 
         result = await env.reset(task=task, seed=SEED)
@@ -332,12 +335,12 @@ async def run_one_task(client: OpenAI, task: str) -> None:
 # ---------------------------------------------------------------------------
 
 async def main() -> None:
-    if not API_KEY:
+    if not HF_TOKEN:
         raise RuntimeError(
             "HF_TOKEN environment variable is required but not set. "
             "Set it before running: set HF_TOKEN=your_token"
         )
-    client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
+    client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
 
     for task in TASKS:
         await run_one_task(client, task)
