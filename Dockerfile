@@ -29,6 +29,8 @@ COPY --from=builder /app/env/.venv /app/.venv
 COPY --from=builder /app/env /app/env
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONPATH="/app/env:$PYTHONPATH"
+# Gradio Playground at /web; root / redirects there (see server/app.py)
+ENV ENABLE_WEB_INTERFACE=true
 
 # HF Spaces sets PORT=7860; local Docker often uses 8000. Probe the same port Uvicorn uses.
 HEALTHCHECK --interval=15s --timeout=5s --start-period=120s --retries=5 \

@@ -293,6 +293,9 @@ while not done:
 ## ⚡ Quick Start
 
 ### Option 1: Use the Live HF Space (No setup needed)
+
+The Space **App** tab loads `/`. The Docker image sets **`ENABLE_WEB_INTERFACE=true`**, so `/` **redirects to the Gradio Playground** at [`/web/`](https://roushan1889-support-triage-env.hf.space/web/). If you only see JSON, open **`/web/`** directly or trigger a rebuild so the latest image (with that env) is running. Interactive API: [`/docs`](https://roushan1889-support-triage-env.hf.space/docs).
+
 ```bash
 pip install openenv-core openai
 

@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import os
+from typing import Union
+
+from fastapi.responses import RedirectResponse
 from openenv.core.env_server import create_app
 
 try:
@@ -22,12 +26,18 @@ app = create_app(
 
 
 @app.get("/", include_in_schema=False)
-def _space_root() -> dict[str, str]:
+def _space_root() -> Union[RedirectResponse, dict[str, str]]:
+    # This route is registered after create_app() and overrides OpenEnv's default
+    # root. When the Gradio UI is enabled, send judges to the Playground; otherwise
+    # keep a tiny JSON index for API-only runs.
+    if os.getenv("ENABLE_WEB_INTERFACE", "false").lower() in ("true", "1", "yes"):
+        return RedirectResponse(url="/web/")
     return {
         "service": "support_triage_env",
         "health": "/health",
         "docs": "/docs",
         "reset": "POST /reset",
+        "playground": "set ENABLE_WEB_INTERFACE=true then open /web/",
     }
 
 
