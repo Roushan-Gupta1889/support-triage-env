@@ -35,9 +35,24 @@ tags:
 
 ---
 
+## Start here — repo map (≈30 seconds)
+
+| What you want | Where to look |
+|---------------|----------------|
+| **Environment** (tickets, dense rewards, tools, MDP) | **`support_triage_env/`** — start with `server/triage_environment.py`, `graders.py`, `models.py` |
+| **Baseline LLM agent** + trajectory export | **`inference.py`** (repo root) |
+| **Deploy / OpenEnv** | **`Dockerfile`**, **`openenv.yaml`** |
+| **Optional tools** (learning curve, CSV summaries, config sweep) | **`scripts/`** — only if you want plots or batch metrics |
+
+**`server/app.py` (root)** is a tiny **OpenEnv validator shim** only. The real FastAPI app lives in **`support_triage_env/server/app.py`**.
+
+Detail sections below are for depth; the table above is enough for a first pass.
+
+---
+
 ## Beyond the starter template
 
-This submission extends the canonical OpenEnv support-triage pattern with: **(1)** four-task dense rubrics with explicit [0, 1] formulas, **(2)** tool-gated hidden state (true MDP-style partial observability), **(3)** ethical bias probes (`is_probe`) with zero-gradient neutral rewards, **(4)** a stagnation-aware multi-step **`EpisodeAgent`** and **`trajectory.jsonl` / `trajectory.json`** export, **(5)** **`visualize_trajectory.py`** for judge-facing learning curves, **(6)** **`train_baseline.py`** (reward-driven hyperparameter sweep) and **`analyze_trajectories.py`** (per-task CSV / Markdown from logs). The goal is reproducible RL infrastructure, not a one-shot API demo.
+This submission extends the canonical OpenEnv support-triage pattern with: **(1)** four-task dense rubrics with explicit [0, 1] formulas, **(2)** tool-gated hidden state (MDP-style partial observability), **(3)** ethical bias probes (`is_probe`) with zero-gradient neutral rewards, **(4)** a stagnation-aware **`EpisodeAgent`** in `inference.py` plus **`trajectory.jsonl` / `trajectory.json`**, **(5)** optional **`scripts/`** helpers (visualize, analyze, `train_baseline`). Goal: reproducible RL infrastructure, not a one-shot API demo.
 
 *Contrast:* Some environments mix rule-based shaping with periodic **LLM-as-judge** scores; here **all** graded rewards are **deterministic** from `graders.py` / `SupportTriageRubric`, which is ideal for reproducible training and ablations.
 
@@ -230,24 +245,24 @@ After a run, the script writes:
 - **`trajectory.jsonl`** — one JSON object per line (each step plus `episode_end` summaries), easy to stream append.
 - **`trajectory.json`** — the same records as a single valid JSON array (generated at shutdown). Set `SUPPORT_TRIAGE_TRAJECTORY_APPEND=1` to append across runs instead of resetting.
 
-Regenerate the hero plot from real logs or bundled demo data:
+Regenerate the hero plot from real logs or bundled demo data (run from repo root):
 
 ```bash
 pip install -r requirements.txt   # includes matplotlib
-python visualize_trajectory.py -i trajectory.json
+python scripts/visualize_trajectory.py -i trajectory.json
 # or representative demo (matches committed learning_curve.svg):
-python visualize_trajectory.py --demo
-# optional high-res PNG for slides: python visualize_trajectory.py --demo -o learning_curve.png
+python scripts/visualize_trajectory.py --demo
+# optional high-res PNG for slides: python scripts/visualize_trajectory.py --demo -o learning_curve.png
 ```
 
-### Configuration search (`train_baseline.py`)
+### Configuration search (`scripts/train_baseline.py`)
 
 Closes a **reward → decision** loop without full policy gradients: run several named agent configurations (base temperature, max steps, stagnation hint threshold), rank them by **mean final grader score** over the same tasks, and write **`train_baseline_results.json`**.
 
 ```bash
 export HF_TOKEN=...
 export SUPPORT_TRIAGE_BASE_URL=https://roushan1889-support-triage-env.hf.space
-python train_baseline.py
+python scripts/train_baseline.py
 # optional: --tasks ticket_category,ticket_priority --seed 0
 ```
 
@@ -261,15 +276,15 @@ Example output shape (your numbers will vary):
 
 The script prints a ranked table and saves JSON with the winning bundle under `"best"`.
 
-### Trajectory analytics (`analyze_trajectories.py`)
+### Trajectory analytics (`scripts/analyze_trajectories.py`)
 
 Summarize any run’s **`trajectory.jsonl`** or **`trajectory.json`** into per-task success rate, mean final score, and mean per-step reward:
 
 ```bash
-python analyze_trajectories.py -i trajectory.jsonl -o trajectory_summary.csv --markdown
+python scripts/analyze_trajectories.py -i trajectory.jsonl -o trajectory_summary.csv --markdown
 ```
 
-Dry-run without calling the API: `python analyze_trajectories.py -i examples/sample_trajectory.jsonl -o trajectory_summary.csv`.
+Dry-run without calling the API: `python scripts/analyze_trajectories.py -i examples/sample_trajectory.jsonl -o trajectory_summary.csv`.
 
 ### Using this environment as an RL benchmark
 
@@ -354,23 +369,17 @@ openenv validate --url https://roushan1889-support-triage-env.hf.space
 
 ```
 support-triage-env/
-├── inference.py                         # Multi-step episodic agent + trajectory export
-├── train_baseline.py                    # Reward-driven config sweep (pseudo-learning loop)
-├── analyze_trajectories.py              # Per-task metrics from trajectory logs → CSV / MD
-├── visualize_trajectory.py              # Step vs. dense reward → learning_curve.svg
-├── learning_curve.svg                   # Judge-facing learning visualization (SVG for HF git)
-├── requirements.txt                     # Python dependencies
-├── pyproject.toml                       # Package config + uv scripts
-├── Dockerfile                           # HF Space deployment
-├── server/app.py                        # Shim for `openenv validate` (delegates to package)
-├── uv.lock                              # Reproducible builds
-└── support_triage_env/
-    ├── models.py                        # Action / Observation / State schemas
-    └── server/
-        ├── app.py                       # FastAPI application (canonical app)
-        ├── triage_environment.py        # Environment logic + infinite procedural generation
-        ├── graders.py                   # Deterministic graders (all 4 tasks)
-        └── tests/test_graders.py        # Grader unit tests
+├── inference.py              # ★ Baseline LLM agent + trajectory export
+├── support_triage_env/       # ★ Environment package (env logic, API, graders)
+├── Dockerfile                # HF Space
+├── openenv.yaml
+├── learning_curve.svg        # Committed demo plot (regenerate via scripts/)
+├── scripts/                  # Optional: visualize_trajectory, analyze_trajectories, train_baseline
+├── examples/                 # e.g. sample_trajectory.jsonl for dry-runs
+├── server/app.py             # OpenEnv validate shim only → delegates to package
+├── pyproject.toml
+├── requirements.txt
+└── uv.lock
 ```
 
 ---

@@ -1,16 +1,8 @@
 """
-train_baseline.py — lightweight configuration search over the episodic agent.
+Reward-driven hyperparameter sweep over the episodic agent. Run from repo root:
 
-Runs the same tasks under a few preset hyperparameter bundles (temperature,
-max steps, stagnation hint threshold), ranks them by mean episode score, and
-writes train_baseline_results.json. This is not full policy-gradient RL, but
-it closes the loop: trajectories → scalar reward → improved configuration.
-
-Requires the same env as inference.py (HF_TOKEN, SUPPORT_TRIAGE_BASE_URL, etc.).
-
-Usage:
-  python train_baseline.py
-  python train_baseline.py --tasks ticket_category,ticket_priority --seed 0
+  python scripts/train_baseline.py
+  python scripts/train_baseline.py --tasks ticket_category,ticket_priority --seed 0
 """
 
 from __future__ import annotations
@@ -18,10 +10,15 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-import os
 import statistics
+import sys
 from dataclasses import asdict
+from pathlib import Path
 from typing import List, Sequence, Tuple
+
+_ROOT = Path(__file__).resolve().parents[1]
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
 from openai import OpenAI
 

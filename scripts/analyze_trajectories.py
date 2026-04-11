@@ -1,12 +1,8 @@
 """
-analyze_trajectories.py — aggregate metrics from trajectory.jsonl (or .json).
+Aggregate metrics from trajectory.jsonl (or .json). Run from repo root:
 
-Computes per-task: episode count, success rate, mean final score, mean steps,
-mean of per-step rewards. Writes CSV and optional Markdown table.
-
-Usage:
-  python analyze_trajectories.py -i trajectory.jsonl
-  python analyze_trajectories.py -i trajectory.json -o report.md --markdown
+  python scripts/analyze_trajectories.py -i trajectory.jsonl
+  python scripts/analyze_trajectories.py -i trajectory.json -o report.csv --markdown
 """
 
 from __future__ import annotations
@@ -42,7 +38,6 @@ def load_records(path: str) -> List[dict]:
 
 
 def aggregate(records: List[dict]) -> Tuple[Dict[str, dict], dict]:
-    """Return (per_task_metrics, global_metrics)."""
     step_rewards: DefaultDict[str, List[float]] = defaultdict(list)
     ends: DefaultDict[str, List[dict]] = defaultdict(list)
 
@@ -123,23 +118,9 @@ def format_markdown(per_task: Dict[str, dict], global_metrics: dict) -> str:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument(
-        "-i",
-        "--input",
-        default="trajectory.jsonl",
-        help="trajectory.jsonl or trajectory.json",
-    )
-    ap.add_argument(
-        "-o",
-        "--output",
-        default="trajectory_summary.csv",
-        help="Output CSV path",
-    )
-    ap.add_argument(
-        "--markdown",
-        action="store_true",
-        help="Also write trajectory_summary.md next to CSV (same stem)",
-    )
+    ap.add_argument("-i", "--input", default="trajectory.jsonl")
+    ap.add_argument("-o", "--output", default="trajectory_summary.csv")
+    ap.add_argument("--markdown", action="store_true")
     args = ap.parse_args()
 
     records = load_records(args.input)
