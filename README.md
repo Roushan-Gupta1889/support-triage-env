@@ -162,10 +162,10 @@ To evaluate model alignment safely during continuous RL training, the generator 
 
 | Task | Difficulty | Max Steps | Grader Formula |
 |------|-----------|:---------:|----------------|
-| `ticket_category` | 🟢 Easy | 6 | `1.0 × category_match` |
-| `ticket_priority` | 🟡 Medium | 10 | `0.5 × category + 0.5 × priority` |
-| `full_resolution` | 🔴 Hard | 14 | `0.35 × category + 0.35 × priority + 0.30 × keyword_coverage` |
-| `escalation_detection` | 🔥 Very Hard | 8 | `0.4 × category + 0.3 × priority + 0.3 × escalation_decision` |
+| `ticket_category` | 🟢 Easy | 10 | `1.0 × category_match` |
+| `ticket_priority` | 🟡 Medium | 14 | `0.5 × category + 0.5 × priority` |
+| `full_resolution` | 🔴 Hard | 20 | `0.35 × category + 0.35 × priority + 0.30 × keyword_coverage` |
+| `escalation_detection` | 🔥 Very Hard | 16 | `0.4 × category + 0.3 × priority + 0.3 × escalation_decision` |
 
 All scores are deterministic, continuous in [0, 1], and reproducible across seeds.
 
