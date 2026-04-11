@@ -6,15 +6,20 @@ import os
 
 from fastapi.responses import RedirectResponse
 from openenv.core.env_server import create_app
+from openenv.core.env_server import web_interface as openenv_web_interface
 
 try:
     # when running as package
     from support_triage_env.models import SupportTriageAction, SupportTriageObservation
+    from support_triage_env.server.gradio_ui import build_support_triage_gradio_app
     from support_triage_env.server.triage_environment import SupportTriageEnvironment
 except ImportError:
     # fallback (local dev)
     from models import SupportTriageAction, SupportTriageObservation
+    from server.gradio_ui import build_support_triage_gradio_app
     from server.triage_environment import SupportTriageEnvironment
+
+openenv_web_interface.build_gradio_app = build_support_triage_gradio_app
 
 app = create_app(
     SupportTriageEnvironment,

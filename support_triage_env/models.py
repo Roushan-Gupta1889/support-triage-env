@@ -52,8 +52,16 @@ class SupportTriageObservation(Observation):
     ticket_subject: str = Field(default="", description="Ticket subject line")
     ticket_body: str = Field(default="", description="Ticket body text")
     task_name: str = Field(default="", description="Active task id")
+    task_label: str = Field(
+        default="",
+        description="Human-friendly task label with difficulty, e.g. 'ticket_category (Easy)'",
+    )
     instruction: str = Field(default="", description="What must be satisfied to finish the episode")
     feedback: str = Field(default="", description="Feedback on the last action")
+    reward_explanation: str = Field(
+        default="",
+        description="Human-readable explanation of how the latest reward was produced",
+    )
     submission_json: str = Field(
         default="{}",
         description="JSON snapshot of merged category/priority/reply so far",

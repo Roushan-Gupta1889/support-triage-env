@@ -38,6 +38,13 @@ TASK_MAX_STEPS: Dict[str, int] = {
     "escalation_detection": 16,
 }
 
+TASK_DIFFICULTY_LABELS: Dict[str, str] = {
+    "ticket_category": "Easy",
+    "ticket_priority": "Medium",
+    "full_resolution": "Hard",
+    "escalation_detection": "Very Hard",
+}
+
 
 
 class SupportTriageEnvironment(Environment):
@@ -122,8 +129,10 @@ class SupportTriageEnvironment(Environment):
             ticket_subject=self._ticket["subject"],
             ticket_body=self._ticket["body"],
             task_name=self._task,
+            task_label=_task_label(self._task),
             instruction=self._instruction,
             feedback="Episode started. Submit fields using the action schema.",
+            reward_explanation="Reward breakdown will appear here after each step.",
             submission_json="{}",
             step_index=0,
             max_steps=self._max_steps,
@@ -165,8 +174,14 @@ class SupportTriageEnvironment(Environment):
                 done=False,
                 feedback=f"[TOOL OUTPUT] {tool_name}:\n{tool_output}",
                 last_error=None,
+                reward_explanation=(
+                    f"Tool call '{tool_name}' executed -> +{tool_reward:.2f}\n"
+                    "Environment state updated with tool output\n\n"
+                    f"Final Reward = {tool_reward:.2f}"
+                ),
             )
 
+        previous_submission = dict(self._submission)
         delta = _action_to_delta(action)
         if not delta:
             err = "Empty action: set at least one of category, priority, reply, escalate, or use a tool_call."
@@ -177,6 +192,7 @@ class SupportTriageEnvironment(Environment):
                 done=False,
                 feedback="You must submit at least one field or tool call.",
                 last_error=err,
+                reward_explanation="No valid field was submitted -> -0.05\n\nFinal Reward = -0.05",
             )
 
         new_sub = merge_submission(self._submission, delta)
@@ -187,6 +203,15 @@ class SupportTriageEnvironment(Environment):
         stagnation = 0.02 if delta_reward < 1e-6 else 0.0
         step_reward = max(0.0, min(1.0, delta_reward - stagnation))
         self._last_partial = max(self._last_partial, partial)
+        reward_explanation = _build_reward_explanation(
+            self._task,
+            previous_submission,
+            self._submission,
+            self._ticket,
+            step_reward,
+            stagnation,
+            getattr(self, "_is_probe", False),
+        )
 
         score = final_grader(self._task, self._submission, self._ticket)
         
@@ -216,6 +241,7 @@ class SupportTriageEnvironment(Environment):
                 feedback=f"Episode finished. Grader={exposed_score:.3f}. {fb}",
                 last_error=None,
                 grader_score=exposed_score,
+                reward_explanation=reward_explanation,
             )
             return obs
 
@@ -225,6 +251,7 @@ class SupportTriageEnvironment(Environment):
             done=False,
             feedback=fb,
             last_error=err,
+            reward_explanation=reward_explanation,
         )
 
     def _build_obs(
@@ -235,6 +262,7 @@ class SupportTriageEnvironment(Environment):
         feedback: str,
         last_error: Optional[str],
         grader_score: Optional[float] = None,
+        reward_explanation: str = "",
     ) -> SupportTriageObservation:
         meta: Dict[str, Any] = {}
         if done and grader_score is not None:
@@ -247,8 +275,10 @@ class SupportTriageEnvironment(Environment):
             ticket_subject=self._ticket["subject"],
             ticket_body=self._ticket["body"],
             task_name=self._task,
+            task_label=_task_label(self._task),
             instruction=self._instruction,
             feedback=feedback,
+            reward_explanation=reward_explanation,
             submission_json=submission_to_json(self._submission),
             step_index=self._state.step_count,
             max_steps=self._max_steps,
@@ -280,5 +310,106 @@ def _action_to_delta(action: SupportTriageAction) -> Dict[str, Any]:
     if action.reply is not None:
         d["reply"] = action.reply
     if action.escalate is not None:
-        d["escalate"] = action.escalate
+        d["escalate"] = _normalize_escalate_value(action.escalate)
     return d
+
+
+def _task_label(task: str) -> str:
+    return f"{task} ({TASK_DIFFICULTY_LABELS.get(task, 'Unknown')})"
+
+
+def _normalize_escalate_value(value: Any) -> Any:
+    if value is None:
+        return None
+    normalized = str(value).strip().lower()
+    if normalized in {"true", "yes", "1"}:
+        return "yes"
+    if normalized in {"false", "no", "0"}:
+        return "no"
+    return value
+
+
+def _build_reward_explanation(
+    task: TaskName,
+    previous_submission: Dict[str, Any],
+    current_submission: Dict[str, Any],
+    ground_truth: Dict[str, Any],
+    step_reward: float,
+    stagnation_penalty: float,
+    is_probe: bool,
+) -> str:
+    if is_probe:
+        return "Bias probe active -> neutral trajectory reward\n\nFinal Reward = 1.00"
+
+    previous_components = dict(_score_components(task, previous_submission, ground_truth))
+    current_components = dict(_score_components(task, current_submission, ground_truth))
+
+    lines = []
+    for label, current_score in current_components.items():
+        previous_score = previous_components.get(label, 0.0)
+        gain = max(0.0, current_score - previous_score)
+        lines.append(f"{label} -> +{gain:.2f}")
+
+    if stagnation_penalty > 0:
+        lines.append(f"Stagnation penalty -> -{stagnation_penalty:.2f}")
+    else:
+        lines.append("Stagnation penalty -> -0.00")
+
+    lines.append("")
+    lines.append(f"Final Reward = {step_reward:.2f}")
+    return "\n".join(lines)
+
+
+def _score_components(
+    task: TaskName,
+    submission: Dict[str, Any],
+    ground_truth: Dict[str, Any],
+) -> List[tuple[str, float]]:
+    category_ok = (
+        _norm(submission.get("category")) == _norm(ground_truth.get("category"))
+        and _norm(submission.get("category")) in ("billing", "technical", "account")
+    )
+    priority_ok = (
+        _norm(submission.get("priority")) == _norm(ground_truth.get("priority"))
+        and _norm(submission.get("priority")) in ("low", "medium", "high")
+    )
+    escalate_target = "yes" if ground_truth.get("requires_escalation") else "no"
+    escalate_ok = (
+        _norm(submission.get("escalate")) == escalate_target
+        and _norm(submission.get("escalate")) in ("yes", "no")
+    )
+
+    if task == "ticket_category":
+        return [("Category correct", 1.0 if category_ok else 0.0)]
+
+    if task == "ticket_priority":
+        return [
+            ("Category aligned", 0.5 if category_ok else 0.0),
+            ("Priority aligned", 0.5 if priority_ok else 0.0),
+        ]
+
+    if task == "escalation_detection":
+        return [
+            ("Category aligned", 0.4 if category_ok else 0.0),
+            ("Priority aligned", 0.3 if priority_ok else 0.0),
+            ("Escalation decision correct", 0.3 if escalate_ok else 0.0),
+        ]
+
+    reply_text = (submission.get("reply") or "").casefold()
+    required = [part.strip().lower() for part in str(ground_truth.get("reply_keywords", "")).split(",") if part.strip()]
+    if required:
+        reply_score = sum(1 for phrase in required if phrase in reply_text) / len(required)
+    else:
+        reply_score = 1.0 if reply_text.strip() else 0.0
+
+    return [
+        ("Category aligned", 0.35 if category_ok else 0.0),
+        ("Priority aligned", 0.35 if priority_ok else 0.0),
+        ("Response quality", 0.30 * reply_score),
+    ]
+
+
+def _norm(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value).strip().lower()

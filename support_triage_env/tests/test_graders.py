@@ -281,18 +281,22 @@ class TestEnvironment:
         env.reset(seed=0, task="ticket_category")  # TK-1001, billing
         obs = env.step(SupportTriageAction(category="billing"))
         assert obs.reward > 0
+        assert "Category correct" in obs.reward_explanation
+        assert "Final Reward" in obs.reward_explanation
 
     def test_step_wrong_action_easy(self):
         env = self._make_env()
         env.reset(seed=0, task="ticket_category")
         obs = env.step(SupportTriageAction(category="account"))
         assert obs.reward == 0.0
+        assert "Stagnation penalty" in obs.reward_explanation
 
     def test_empty_action_penalty(self):
         env = self._make_env()
         env.reset(seed=0, task="ticket_category")
         obs = env.step(SupportTriageAction())  # all None
         assert obs.reward < 0
+        assert "No valid field was submitted" in obs.reward_explanation
 
     def test_done_on_perfect_score(self):
         env = self._make_env()
@@ -300,6 +304,7 @@ class TestEnvironment:
         obs = env.step(SupportTriageAction(category="billing"))
         assert obs.done
         assert obs.grader_score == pytest.approx(1.0, abs=0.01)
+        assert obs.task_label == "ticket_category (Easy)"
 
     def test_max_steps_terminates_episode(self):
         env = self._make_env()
@@ -334,3 +339,16 @@ class TestEnvironment:
         assert obs is not None and obs.done
         assert obs.grader_score is not None
         assert obs.grader_score >= 0.7  # well above chance
+
+    def test_escalate_true_false_aliases_are_accepted(self):
+        env = self._make_env()
+        env.reset(seed=3, task="escalation_detection")
+        obs = env.step(
+            SupportTriageAction(
+                category="technical",
+                priority="high",
+                escalate="true",
+            )
+        )
+        assert obs is not None
+        assert '"escalate": "yes"' in obs.submission_json
