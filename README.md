@@ -479,7 +479,6 @@ If the model repeats the same wrong answer, its score stays stuck. The environme
 | | GitHub | Hugging Face Space |
 |--|--------|-------------------|
 | **This submission** | [Roushan-Gupta1889/support-triage-env](https://github.com/Roushan-Gupta1889/support-triage-env) | [Roushan1889/support-triage-env](https://huggingface.co/spaces/Roushan1889/support-triage-env) |
-| **Related env (LLM-judge + rule hybrid)** | [madhu-thinks/Priority_panic](https://github.com/madhu-thinks/Priority_panic) | [MadhuBuilds/priority_panic](https://huggingface.co/spaces/MadhuBuilds/priority_panic) |
 
 ---
 
