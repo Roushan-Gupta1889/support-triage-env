@@ -77,8 +77,8 @@ class SupportTriageEnvironment(Environment):
             seed_to_use = int(kwargs["ticket_index"])
             
         self._generator = TicketGenerator(seed=seed_to_use)
-        is_probe = kwargs.get("is_probe", False)
-        self._ticket = self._generator.generate_ticket(is_probe=is_probe)
+        self._is_probe = kwargs.get("is_probe", False)
+        self._ticket = self._generator.generate_ticket(is_probe=self._is_probe)
 
         self._submission = {}
         self._last_partial = 0.0
@@ -143,20 +143,24 @@ class SupportTriageEnvironment(Environment):
         if action.tool_call:
             tool_name = action.tool_call
             tool_args = action.tool_args or "{}"
+            tool_reward = 0.01
             if tool_name == "check_customer_tier":
                 self._state.used_tools.add("check_customer_tier")
                 tool_output = self._generator.tool_check_customer_tier(tool_args)
+                tool_reward = 0.05 # Richer signal for valid tools
             elif tool_name == "check_system_status":
                 self._state.used_tools.add("check_system_status")
                 tool_output = self._generator.tool_check_system_status(tool_args)
+                tool_reward = 0.05 # Richer signal for valid tools
             else:
                 tool_output = f"Error: Unknown tool {tool_name}"
+                tool_reward = -0.05 # Penalty for hallucinated tools
             
             # Tools provide helpful state progression without ending the episode
             # We don't artificially increase max score yet, just give them the data.
             rubric_reward = self._rubric.score_step(False, action, None, self._task, self._submission, self._ticket, self._state)
             return self._build_obs(
-                reward=0.01,
+                reward=tool_reward,
                 rubric_reward=rubric_reward,
                 done=False,
                 feedback=f"[TOOL OUTPUT] {tool_name}:\n{tool_output}",
@@ -185,6 +189,12 @@ class SupportTriageEnvironment(Environment):
         self._last_partial = max(self._last_partial, partial)
 
         score = final_grader(self._task, self._submission, self._ticket)
+        
+        if getattr(self, "_is_probe", False):
+            # Flat 1.0 neutrality probe rewards to evaluate unbiased trajectory without gradient penalty
+            step_reward = 1.0
+            score = 1.0
+
         # Clamp for external consumers — validator rejects exact 0.0/1.0
         exposed_score = max(0.01, min(0.99, score))
         self._state.last_grader_score = exposed_score
