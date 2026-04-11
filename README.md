@@ -50,6 +50,45 @@ Detail sections below are for depth; the table above is enough for a first pass.
 
 ---
 
+## For judges — 2-minute review
+
+**One line:** OpenEnv environment for **multi-step** support-triage with **deterministic dense rewards** in [0, 1], **hidden state via tools**, optional **bias probes**, a **stagnation-aware LLM baseline** (`inference.py`), **trajectory logs**, **learning curve** (above), and optional **reward-driven config search** (`scripts/train_baseline.py`).
+
+| Link | URL |
+|------|-----|
+| **Live Space** | [huggingface.co/spaces/Roushan1889/support-triage-env](https://huggingface.co/spaces/Roushan1889/support-triage-env) |
+| **Playground** (Gradio UI) | […/web/](https://roushan1889-support-triage-env.hf.space/web/) |
+| **Swagger / OpenAPI** | […/docs](https://roushan1889-support-triage-env.hf.space/docs) |
+| **Source** | [github.com/Roushan-Gupta1889/support-triage-env](https://github.com/Roushan-Gupta1889/support-triage-env) |
+
+**Check OpenEnv without cloning:**
+
+```bash
+openenv validate --url https://roushan1889-support-triage-env.hf.space
+```
+
+**Optional — run the baseline agent** (needs a [Hugging Face token](https://huggingface.co/settings/tokens) with Inference access):
+
+```bash
+git clone https://github.com/Roushan-Gupta1889/support-triage-env.git && cd support-triage-env
+pip install -r requirements.txt && pip install -e .
+export HF_TOKEN=your_token
+export SUPPORT_TRIAGE_BASE_URL=https://roushan1889-support-triage-env.hf.space
+python inference.py
+```
+
+**Example config sweep** (`python scripts/train_baseline.py`, four tasks, default seed — scores vary slightly with router load; run below is from the author’s environment):
+
+| Config | Mean final grader score | Success rate (tasks) |
+|--------|-------------------------:|---------------------:|
+| `C_exploratory` | **0.990** | 100% |
+| `B_defaultish` | 0.670 | 50% |
+| `A_conservative` | 0.495 | 50% |
+
+**What to notice:** (1) rubrics and feedback strings are **fully rule-based** in `support_triage_env/server/graders.py` — good for reproducible RL; (2) **`inference.py`** is a real **multi-turn** loop, not a single chat completion; (3) **`trajectory.json`** / **`trajectory.jsonl`** + **`scripts/visualize_trajectory.py`** make improvement **visible**.
+
+---
+
 ## Beyond the starter template
 
 This submission extends the canonical OpenEnv support-triage pattern with: **(1)** four-task dense rubrics with explicit [0, 1] formulas, **(2)** tool-gated hidden state (MDP-style partial observability), **(3)** ethical bias probes (`is_probe`) with zero-gradient neutral rewards, **(4)** a stagnation-aware **`EpisodeAgent`** in `inference.py` plus **`trajectory.jsonl` / `trajectory.json`**, **(5)** optional **`scripts/`** helpers (visualize, analyze, `train_baseline`). Goal: reproducible RL infrastructure, not a one-shot API demo.
