@@ -42,7 +42,7 @@ tags:
 | **Environment** (tickets, dense rewards, tools, MDP) | **`support_triage_env/`** — start with `server/triage_environment.py`, `graders.py`, `models.py` |
 | **Baseline LLM agent** + trajectory export | **`inference.py`** (repo root) |
 | **Deploy / OpenEnv** | **`Dockerfile`**, **`openenv.yaml`** |
-| **Optional tools** (learning curve, CSV summaries, config sweep) | **`scripts/`** — only if you want plots or batch metrics |
+| **Optional tools** (learning curve, CSV summaries, config sweep) | **`scripts/`** — or the same names at repo root (`train_baseline.py`, etc.), which forward to `scripts/` |
 
 **`server/app.py` (root)** is a tiny **OpenEnv validator shim** only. The real FastAPI app lives in **`support_triage_env/server/app.py`**.
 
