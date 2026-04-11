@@ -18,6 +18,10 @@ tags:
 
 ### *The first RL environment for training AI agents to handle real customer support operations*
 
+💡 Train AI agents to triage real customer support tickets using multi-step reasoning, dense rewards, and measurable feedback.
+
+🚀 A complete RL-ready system — environment + agent + trajectory learning + evaluation + visualization.
+
 [![OpenEnv Validated](https://img.shields.io/badge/OpenEnv-6%2F6%20Validated-brightgreen?style=for-the-badge)](https://roushan1889-support-triage-env.hf.space)
 [![HF Space](https://img.shields.io/badge/🤗%20Space-Live-blue?style=for-the-badge)](https://huggingface.co/spaces/Roushan1889/support-triage-env)
 [![4 Tasks](https://img.shields.io/badge/Tasks-4%20Difficulty%20Levels-orange?style=for-the-badge)](#tasks)
