@@ -25,9 +25,17 @@ tags:
 
 ![Agent learning curve: dense reward trajectories across all four tasks (highlight: escalation_detection)](learning_curve.svg)
 
-**Design philosophy:** **simulate** (multi-turn OpenEnv episodes) → **evaluate** (deterministic dense rewards in [0, 1]) → **improve** (feedback + stagnation-aware policy) → **visualize** (logged trajectories → `learning_curve.svg`).
+**Design philosophy:** **simulate** (multi-turn OpenEnv episodes) → **evaluate** (deterministic dense rewards in [0, 1]) → **improve** (feedback + stagnation-aware policy + optional config search) → **visualize** (logged trajectories → `learning_curve.svg`).
 
 </div>
+
+---
+
+## Beyond the starter template
+
+This submission extends the canonical OpenEnv support-triage pattern with: **(1)** four-task dense rubrics with explicit [0, 1] formulas, **(2)** tool-gated hidden state (true MDP-style partial observability), **(3)** ethical bias probes (`is_probe`) with zero-gradient neutral rewards, **(4)** a stagnation-aware multi-step **`EpisodeAgent`** and **`trajectory.jsonl` / `trajectory.json`** export, **(5)** **`visualize_trajectory.py`** for judge-facing learning curves, **(6)** **`train_baseline.py`** (reward-driven hyperparameter sweep) and **`analyze_trajectories.py`** (per-task CSV / Markdown from logs). The goal is reproducible RL infrastructure, not a one-shot API demo.
+
+*Contrast:* Some environments mix rule-based shaping with periodic **LLM-as-judge** scores; here **all** graded rewards are **deterministic** from `graders.py` / `SupportTriageRubric`, which is ideal for reproducible training and ablations.
 
 ---
 
@@ -203,6 +211,8 @@ Measured with `Qwen/Qwen2.5-72B-Instruct` via HuggingFace Inference Router, `see
 | `full_resolution` | **0.85** ✅ | 14 | All keywords found |
 | `escalation_detection` | **~0.70** ✅ | 8 | Very hard — frontier model challenge |
 
+**Optional second baseline (you run):** set `MODEL_NAME=Qwen/Qwen2.5-7B-Instruct` (or another router-supported model) and run `python inference.py` with the same `seed`; smaller models usually drop on `full_resolution` and `escalation_detection` where tools and long-context reasoning matter. Log results in your fork for a proper benchmark table.
+
 > **Inference uses a stateful `EpisodeAgent`** that maintains full conversation history, detects stagnation, escalates temperature, and injects targeted hints when stuck.
 
 ---
@@ -225,6 +235,54 @@ python visualize_trajectory.py -i trajectory.json
 python visualize_trajectory.py --demo
 # optional high-res PNG for slides: python visualize_trajectory.py --demo -o learning_curve.png
 ```
+
+### Configuration search (`train_baseline.py`)
+
+Closes a **reward → decision** loop without full policy gradients: run several named agent configurations (base temperature, max steps, stagnation hint threshold), rank them by **mean final grader score** over the same tasks, and write **`train_baseline_results.json`**.
+
+```bash
+export HF_TOKEN=...
+export SUPPORT_TRIAGE_BASE_URL=https://roushan1889-support-triage-env.hf.space
+python train_baseline.py
+# optional: --tasks ticket_category,ticket_priority --seed 0
+```
+
+Example output shape (your numbers will vary):
+
+| Config | Idea |
+|--------|------|
+| `A_conservative` | Low temperature, shorter horizon, later hints |
+| `B_defaultish` | Aligns with default `inference.py` knobs |
+| `C_exploratory` | Higher temperature, longer horizon, earlier hints |
+
+The script prints a ranked table and saves JSON with the winning bundle under `"best"`.
+
+### Trajectory analytics (`analyze_trajectories.py`)
+
+Summarize any run’s **`trajectory.jsonl`** or **`trajectory.json`** into per-task success rate, mean final score, and mean per-step reward:
+
+```bash
+python analyze_trajectories.py -i trajectory.jsonl -o trajectory_summary.csv --markdown
+```
+
+Dry-run without calling the API: `python analyze_trajectories.py -i examples/sample_trajectory.jsonl -o trajectory_summary.csv`.
+
+### Using this environment as an RL benchmark
+
+The OpenEnv contract gives you everything needed for a standard transition tuple **(s, a, r, s′)**:
+
+```text
+obs, info = await env.reset(task=..., seed=...)
+while not done:
+    action = policy(obs)                    # SupportTriageAction
+    result = await env.step(action)
+    r = float(result.reward or 0.0)
+    obs_next = result.observation
+    buffer.add(obs, action, r, obs_next, done=result.done)
+    obs = obs_next
+```
+
+`inference.py` is a reference **behavior policy** (LLM + heuristics). Swap `policy` for PPO / offline RL / your trainer; keep logging via the same observation and reward fields.
 
 ---
 
@@ -290,6 +348,8 @@ openenv validate --url https://roushan1889-support-triage-env.hf.space
 ```
 support-triage-env/
 ├── inference.py                         # Multi-step episodic agent + trajectory export
+├── train_baseline.py                    # Reward-driven config sweep (pseudo-learning loop)
+├── analyze_trajectories.py              # Per-task metrics from trajectory logs → CSV / MD
 ├── visualize_trajectory.py              # Step vs. dense reward → learning_curve.svg
 ├── learning_curve.svg                   # Judge-facing learning visualization (SVG for HF git)
 ├── requirements.txt                     # Python dependencies
@@ -356,6 +416,15 @@ This requires genuine understanding of business context, legal risk, and operati
 
 ### 4️⃣ Stagnation Trap
 If the model repeats the same wrong answer, its score stays stuck. The environment actively penalizes looping behavior, which means an agent must genuinely *explore* alternative actions — exactly the behavior RL training is designed to enable.
+
+---
+
+## 🔗 Repository links
+
+| | GitHub | Hugging Face Space |
+|--|--------|-------------------|
+| **This submission** | [Roushan-Gupta1889/support-triage-env](https://github.com/Roushan-Gupta1889/support-triage-env) | [Roushan1889/support-triage-env](https://huggingface.co/spaces/Roushan1889/support-triage-env) |
+| **Related env (LLM-judge + rule hybrid)** | [madhu-thinks/Priority_panic](https://github.com/madhu-thinks/Priority_panic) | [MadhuBuilds/priority_panic](https://huggingface.co/spaces/MadhuBuilds/priority_panic) |
 
 ---
 

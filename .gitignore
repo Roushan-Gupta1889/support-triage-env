@@ -14,3 +14,6 @@ __pycache__/
 .log
 trajectory.jsonl
 trajectory.json
+train_baseline_results.json
+trajectory_summary.csv
+trajectory_summary.md

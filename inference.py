@@ -8,6 +8,9 @@ Optional:
   SUPPORT_TRIAGE_BASE_URL — HTTP URL of running env (skips Docker when set)
   SUPPORT_TRIAGE_TASKS — comma-separated tasks (default: all three)
   SUPPORT_TRIAGE_SEED — int seed for ticket selection (default: 0)
+  SUPPORT_TRIAGE_MAX_STEPS — cap on agent loop steps (default: 16)
+  SUPPORT_TRIAGE_TEMPERATURE — base sampling temperature (default: 0.2)
+  SUPPORT_TRIAGE_STAGNATION_HINT_AFTER — stagnation count before hint + temp bump (default: 2)
 """
 
 from __future__ import annotations
@@ -17,6 +20,7 @@ import json
 import os
 import re
 import textwrap
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from openai import OpenAI
@@ -41,10 +45,34 @@ TASKS = tuple(
 )
 SEED = int(os.getenv("SUPPORT_TRIAGE_SEED", "0"))
 
-MAX_STEPS_CAP = 16
-TEMPERATURE = 0.2
-MAX_TOKENS = 512
+MAX_STEPS_CAP = int(os.getenv("SUPPORT_TRIAGE_MAX_STEPS", "16"))
+TEMPERATURE = float(os.getenv("SUPPORT_TRIAGE_TEMPERATURE", "0.2"))
+MAX_TOKENS = int(os.getenv("SUPPORT_TRIAGE_MAX_TOKENS", "512"))
 SUCCESS_THRESHOLD = 0.75
+STAGNATION_HINT_AFTER = int(os.getenv("SUPPORT_TRIAGE_STAGNATION_HINT_AFTER", "2"))
+
+
+@dataclass
+class AgentHyperparams:
+    """Sampling and loop controls for EpisodeAgent (tunable for config search / pseudo-RL)."""
+
+    base_temperature: float = field(default_factory=lambda: TEMPERATURE)
+    max_steps_cap: int = field(default_factory=lambda: MAX_STEPS_CAP)
+    max_tokens: int = field(default_factory=lambda: MAX_TOKENS)
+    stagnation_hint_after: int = field(default_factory=lambda: STAGNATION_HINT_AFTER)
+
+
+@dataclass
+class EpisodeResult:
+    task: str
+    success: bool
+    score: float
+    steps: int
+    rewards: List[float]
+
+
+def default_hyperparams() -> AgentHyperparams:
+    return AgentHyperparams()
 
 # Valid values shown to model in system prompt for grounding
 VALID_CATEGORIES = ("billing", "technical", "account")
@@ -80,8 +108,9 @@ def write_trajectory_json_snapshot() -> None:
         pass
 
 
-def log_start(task: str, env: str, model: str) -> None:
-    print(f"[START] task={task} env={env} model={model}", flush=True)
+def log_start(task: str, env: str, model: str, *, emit: bool = True) -> None:
+    if emit:
+        print(f"[START] task={task} env={env} model={model}", flush=True)
 
 
 def log_step(
@@ -91,41 +120,66 @@ def log_step(
     reward: float,
     done: bool,
     error: Optional[str],
+    *,
+    emit: bool = True,
+    write_trajectory: bool = True,
 ) -> None:
     err = error if error else "null"
-    print(
-        f"[STEP] step={step} action={action} reward={reward:.2f} done={str(done).lower()} error={err}",
-        flush=True,
-    )
-    # Serialize to JSONL for visualization/analysis
-    try:
-        with open(TRAJECTORY_LOG, "a", encoding="utf-8") as f:
-            f.write(json.dumps({
-                "task": task,
-                "step": step,
-                "reward": reward,
-                "done": done
-            }) + "\n")
-    except Exception:
-        pass
+    if emit:
+        print(
+            f"[STEP] step={step} action={action} reward={reward:.2f} done={str(done).lower()} error={err}",
+            flush=True,
+        )
+    if write_trajectory:
+        try:
+            with open(TRAJECTORY_LOG, "a", encoding="utf-8") as f:
+                f.write(
+                    json.dumps(
+                        {
+                            "task": task,
+                            "step": step,
+                            "reward": reward,
+                            "done": done,
+                        }
+                    )
+                    + "\n"
+                )
+        except Exception:
+            pass
 
 
-def log_end(task: str, success: bool, steps: int, score: float, rewards: List[float]) -> None:
+def log_end(
+    task: str,
+    success: bool,
+    steps: int,
+    score: float,
+    rewards: List[float],
+    *,
+    emit: bool = True,
+    write_trajectory: bool = True,
+) -> None:
     rstr = ",".join(f"{r:.2f}" for r in rewards)
-    print(
-        f"[END] success={str(success).lower()} steps={steps} score={score:.3f} rewards={rstr}",
-        flush=True,
-    )
-    try:
-        with open(TRAJECTORY_LOG, "a", encoding="utf-8") as f:
-            f.write(json.dumps({
-                "task": task,
-                "event": "episode_end",
-                "success": success,
-                "score": score
-            }) + "\n")
-    except Exception:
-        pass
+    if emit:
+        print(
+            f"[END] success={str(success).lower()} steps={steps} score={score:.3f} rewards={rstr}",
+            flush=True,
+        )
+    if write_trajectory:
+        try:
+            with open(TRAJECTORY_LOG, "a", encoding="utf-8") as f:
+                f.write(
+                    json.dumps(
+                        {
+                            "task": task,
+                            "event": "episode_end",
+                            "success": success,
+                            "score": score,
+                        }
+                    )
+                    + "\n"
+                )
+        except Exception:
+            pass
 
 
 # ---------------------------------------------------------------------------
@@ -223,8 +277,9 @@ def build_followup_message(obs: Any, last_reward: float) -> str:
 class EpisodeAgent:
     """One agent instance per episode; retains full conversation history."""
 
-    def __init__(self, client: OpenAI) -> None:
+    def __init__(self, client: OpenAI, hyp: Optional[AgentHyperparams] = None) -> None:
         self.client = client
+        self.hyp = hyp or default_hyperparams()
         self.history: List[Dict[str, str]] = [
             {"role": "system", "content": SYSTEM_PROMPT}
         ]
@@ -240,9 +295,11 @@ class EpisodeAgent:
         self.history.append({"role": "user", "content": user_msg})
 
         # Escalate temperature when stuck repeating a wrong answer
-        temperature = TEMPERATURE
-        if self._stagnation_count >= 2:
-            temperature = min(0.9, TEMPERATURE + 0.2 * self._stagnation_count)
+        temperature = self.hyp.base_temperature
+        if self._stagnation_count >= self.hyp.stagnation_hint_after:
+            temperature = min(
+                0.9, self.hyp.base_temperature + 0.2 * self._stagnation_count
+            )
             hint = (
                 f"[HINT] You have submitted the same answer {self._stagnation_count} "
                 f"consecutive times with no improvement. STOP. Pick a completely "
@@ -255,7 +312,7 @@ class EpisodeAgent:
                 model=MODEL_NAME,
                 messages=self.history,
                 temperature=temperature,
-                max_tokens=MAX_TOKENS,
+                max_tokens=self.hyp.max_tokens,
             )
             text = (comp.choices[0].message.content or "").strip()
         except Exception:
@@ -310,8 +367,17 @@ def action_to_log_str(action: SupportTriageAction) -> str:
 # Task runner
 # ---------------------------------------------------------------------------
 
-async def run_one_task(client: OpenAI, task: str) -> None:
-    log_start(task=task, env=BENCHMARK, model=MODEL_NAME)
+async def run_one_task(
+    client: OpenAI,
+    task: str,
+    *,
+    hyp: Optional[AgentHyperparams] = None,
+    seed: Optional[int] = None,
+    emit_logs: bool = True,
+    write_trajectory: bool = True,
+) -> EpisodeResult:
+    hyp = hyp or default_hyperparams()
+    log_start(task=task, env=BENCHMARK, model=MODEL_NAME, emit=emit_logs)
 
     rewards: List[float] = []
     steps_taken = 0
@@ -319,6 +385,7 @@ async def run_one_task(client: OpenAI, task: str) -> None:
     success = False
     env: Optional[SupportTriageEnv] = None
     result: Optional[Any] = None
+    ep_seed = SEED if seed is None else seed
 
     try:
         if BASE_URL:
@@ -331,8 +398,8 @@ async def run_one_task(client: OpenAI, task: str) -> None:
                 "Set SUPPORT_TRIAGE_BASE_URL (deployed Space) or LOCAL_IMAGE_NAME for local Docker."
             )
 
-        result = await env.reset(task=task, seed=SEED)
-        agent = EpisodeAgent(client)
+        result = await env.reset(task=task, seed=ep_seed)
+        agent = EpisodeAgent(client, hyp=hyp)
         last_reward: Optional[float] = None
 
         if result.done:
@@ -340,7 +407,7 @@ async def run_one_task(client: OpenAI, task: str) -> None:
             score = float(gs) if gs is not None else 0.0
             success = score >= SUCCESS_THRESHOLD
         else:
-            for step in range(1, MAX_STEPS_CAP + 1):
+            for step in range(1, hyp.max_steps_cap + 1):
                 action = agent.get_action(result.observation, last_reward)
                 result = await env.step(action)
 
@@ -357,6 +424,8 @@ async def run_one_task(client: OpenAI, task: str) -> None:
                     reward=rw,
                     done=result.done,
                     error=last_err,
+                    emit=emit_logs,
+                    write_trajectory=write_trajectory,
                 )
 
                 if result.done:
@@ -375,7 +444,23 @@ async def run_one_task(client: OpenAI, task: str) -> None:
                 await env.close()
             except Exception as e:
                 pass
-        log_end(task, success=success, steps=steps_taken, score=score, rewards=rewards)
+        log_end(
+            task,
+            success=success,
+            steps=steps_taken,
+            score=score,
+            rewards=rewards,
+            emit=emit_logs,
+            write_trajectory=write_trajectory,
+        )
+
+    return EpisodeResult(
+        task=task,
+        success=success,
+        score=score,
+        steps=steps_taken,
+        rewards=rewards,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -404,7 +489,7 @@ async def main() -> None:
                 pass
 
     for task in TASKS:
-        await run_one_task(client, task)
+        await run_one_task(client, task, emit_logs=True, write_trajectory=True)
 
     write_trajectory_json_snapshot()
 

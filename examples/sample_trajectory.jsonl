@@ -1,0 +1,6 @@
+{"task": "ticket_category", "step": 1, "reward": 0.0, "done": false}
+{"task": "ticket_category", "step": 2, "reward": 1.0, "done": true}
+{"task": "ticket_category", "event": "episode_end", "success": true, "score": 1.0}
+{"task": "escalation_detection", "step": 1, "reward": 0.2, "done": false}
+{"task": "escalation_detection", "step": 2, "reward": 0.5, "done": false}
+{"task": "escalation_detection", "event": "episode_end", "success": false, "score": 0.65}
