@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-from typing import Union
 
 from fastapi.responses import RedirectResponse
 from openenv.core.env_server import create_app
@@ -25,8 +24,8 @@ app = create_app(
 )
 
 
-@app.get("/", include_in_schema=False)
-def _space_root() -> Union[RedirectResponse, dict[str, str]]:
+@app.get("/", include_in_schema=False, response_model=None)
+def _space_root():
     # This route is registered after create_app() and overrides OpenEnv's default
     # root. When the Gradio UI is enabled, send judges to the Playground; otherwise
     # keep a tiny JSON index for API-only runs.
