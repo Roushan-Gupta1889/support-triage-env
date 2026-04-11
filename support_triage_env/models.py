@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Literal, Optional, Set, Dict, Any
 
 from openenv.core.env_server.types import Action, Observation, State
-from pydantic import Field
+from pydantic import Field, ConfigDict
 
 TaskName = Literal["ticket_category", "ticket_priority", "full_resolution", "escalation_detection"]
 
@@ -42,15 +42,18 @@ class SupportTriageAction(Action):
         description="JSON string of arguments for the tool."
     )
 
+    # CRITICAL: Prevents Pydantic from crashing if inference sends unexpected fields.
+    model_config = ConfigDict(extra='ignore')
+
 
 class SupportTriageObservation(Observation):
     """Observation shown to the agent after reset or each step."""
 
-    ticket_subject: str = Field(..., description="Ticket subject line")
-    ticket_body: str = Field(..., description="Ticket body text")
-    task_name: str = Field(..., description="Active task id")
-    instruction: str = Field(..., description="What must be satisfied to finish the episode")
-    feedback: str = Field(..., description="Feedback on the last action")
+    ticket_subject: str = Field(default="", description="Ticket subject line")
+    ticket_body: str = Field(default="", description="Ticket body text")
+    task_name: str = Field(default="", description="Active task id")
+    instruction: str = Field(default="", description="What must be satisfied to finish the episode")
+    feedback: str = Field(default="", description="Feedback on the last action")
     submission_json: str = Field(
         default="{}",
         description="JSON snapshot of merged category/priority/reply so far",
@@ -69,6 +72,9 @@ class SupportTriageObservation(Observation):
         default=None,
         description="RFC 004 compliant temporally-discounted rubric score",
     )
+
+    # CRITICAL: Prevents Pydantic from crashing if the server sends unexpected fields.
+    model_config = ConfigDict(extra='ignore')
 
 
 class SupportTriageState(State):
@@ -92,3 +98,6 @@ class SupportTriageState(State):
         default=None,
         description="Fetched system status from mock database",
     )
+
+    # CRITICAL: Ensures compatibility with varying server payload structures.
+    model_config = ConfigDict(extra='ignore')
