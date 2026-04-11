@@ -362,12 +362,12 @@ support-triage-env/
 ├── requirements.txt                     # Python dependencies
 ├── pyproject.toml                       # Package config + uv scripts
 ├── Dockerfile                           # HF Space deployment
-├── server/app.py                        # Root entry-point (openenv validate)
+├── server/app.py                        # Shim for `openenv validate` (delegates to package)
 ├── uv.lock                              # Reproducible builds
 └── support_triage_env/
     ├── models.py                        # Action / Observation / State schemas
     └── server/
-        ├── app.py                       # FastAPI application
+        ├── app.py                       # FastAPI application (canonical app)
         ├── triage_environment.py        # Environment logic + infinite procedural generation
         ├── graders.py                   # Deterministic graders (all 4 tasks)
         └── tests/test_graders.py        # Grader unit tests
