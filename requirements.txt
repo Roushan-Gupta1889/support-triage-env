@@ -19,3 +19,6 @@ requests>=2.31.0
 
 # Testing
 pytest>=8.0.0
+
+# Learning curve (visualize_trajectory.py)
+matplotlib>=3.8.0

@@ -21,6 +21,9 @@ dependencies = [
 dev = [
     "pytest>=8.0.0",
 ]
+viz = [
+    "matplotlib>=3.8.0",
+]
 
 [project.scripts]
 server = "support_triage_env.server.app:main"

@@ -23,6 +23,10 @@ tags:
 [![4 Tasks](https://img.shields.io/badge/Tasks-4%20Difficulty%20Levels-orange?style=for-the-badge)](#tasks)
 [![Infinite Corpus](https://img.shields.io/badge/Corpus-Infinite%20Combinations-purple?style=for-the-badge)](#dynamic-scenario-archetypes)
 
+![Agent learning curve: dense reward trajectories across all four tasks (highlight: escalation_detection)](learning_curve.svg)
+
+**Design philosophy:** **simulate** (multi-turn OpenEnv episodes) → **evaluate** (deterministic dense rewards in [0, 1]) → **improve** (feedback + stagnation-aware policy) → **visualize** (logged trajectories → `learning_curve.svg`).
+
 </div>
 
 ---
@@ -203,6 +207,27 @@ Measured with `Qwen/Qwen2.5-72B-Instruct` via HuggingFace Inference Router, `see
 
 ---
 
+## 🤖 Multi-step episodic agent (`inference.py`)
+
+`inference.py` is not a one-shot API demo: it runs **multi-step episodes** against the live OpenEnv. Each turn, the environment returns **dense rewards** in **[0.0, 1.0]**—partial credit when some fields match, drops when the model stagnates on a wrong answer, and full credit at mastery—so the trajectory is a measurable RL-style signal, not a black-box completion.
+
+After a run, the script writes:
+
+- **`trajectory.jsonl`** — one JSON object per line (each step plus `episode_end` summaries), easy to stream append.
+- **`trajectory.json`** — the same records as a single valid JSON array (generated at shutdown). Set `SUPPORT_TRIAGE_TRAJECTORY_APPEND=1` to append across runs instead of resetting.
+
+Regenerate the hero plot from real logs or bundled demo data:
+
+```bash
+pip install -r requirements.txt   # includes matplotlib
+python visualize_trajectory.py -i trajectory.json
+# or representative demo (matches committed learning_curve.svg):
+python visualize_trajectory.py --demo
+# optional high-res PNG for slides: python visualize_trajectory.py --demo -o learning_curve.png
+```
+
+---
+
 ## ⚡ Quick Start
 
 ### Option 1: Use the Live HF Space (No setup needed)
@@ -264,7 +289,9 @@ openenv validate --url https://roushan1889-support-triage-env.hf.space
 
 ```
 support-triage-env/
-├── inference.py                         # Stateful multi-turn inference agent
+├── inference.py                         # Multi-step episodic agent + trajectory export
+├── visualize_trajectory.py              # Step vs. dense reward → learning_curve.svg
+├── learning_curve.svg                   # Judge-facing learning visualization (SVG for HF git)
 ├── requirements.txt                     # Python dependencies
 ├── pyproject.toml                       # Package config + uv scripts
 ├── Dockerfile                           # HF Space deployment

@@ -12,3 +12,5 @@ __pycache__/
 .env
 .env.*
 .log
+trajectory.jsonl
+trajectory.json

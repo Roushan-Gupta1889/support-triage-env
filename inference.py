@@ -55,11 +55,37 @@ VALID_PRIORITIES = ("low", "medium", "high")
 # Logging helpers
 # ---------------------------------------------------------------------------
 
+TRAJECTORY_LOG = "trajectory.jsonl"
+TRAJECTORY_JSON = "trajectory.json"
+
+
+def write_trajectory_json_snapshot() -> None:
+    """Write a valid JSON array of all records from the JSONL log (for tooling / judges)."""
+    if not os.path.exists(TRAJECTORY_LOG):
+        return
+    records: List[Any] = []
+    with open(TRAJECTORY_LOG, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                records.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+    try:
+        with open(TRAJECTORY_JSON, "w", encoding="utf-8") as out:
+            json.dump(records, out, indent=2)
+    except OSError:
+        pass
+
+
 def log_start(task: str, env: str, model: str) -> None:
     print(f"[START] task={task} env={env} model={model}", flush=True)
 
 
 def log_step(
+    task: str,
     step: int,
     action: str,
     reward: float,
@@ -71,14 +97,35 @@ def log_step(
         f"[STEP] step={step} action={action} reward={reward:.2f} done={str(done).lower()} error={err}",
         flush=True,
     )
+    # Serialize to JSONL for visualization/analysis
+    try:
+        with open(TRAJECTORY_LOG, "a", encoding="utf-8") as f:
+            f.write(json.dumps({
+                "task": task,
+                "step": step,
+                "reward": reward,
+                "done": done
+            }) + "\n")
+    except Exception:
+        pass
 
 
-def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> None:
+def log_end(task: str, success: bool, steps: int, score: float, rewards: List[float]) -> None:
     rstr = ",".join(f"{r:.2f}" for r in rewards)
     print(
         f"[END] success={str(success).lower()} steps={steps} score={score:.3f} rewards={rstr}",
         flush=True,
     )
+    try:
+        with open(TRAJECTORY_LOG, "a", encoding="utf-8") as f:
+            f.write(json.dumps({
+                "task": task,
+                "event": "episode_end",
+                "success": success,
+                "score": score
+            }) + "\n")
+    except Exception:
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -304,6 +351,7 @@ async def run_one_task(client: OpenAI, task: str) -> None:
                 last_err = getattr(result.observation, "last_action_error", None)
 
                 log_step(
+                    task=task,
                     step=step,
                     action=action_to_log_str(action),
                     reward=rw,
@@ -317,7 +365,7 @@ async def run_one_task(client: OpenAI, task: str) -> None:
                     success = score >= SUCCESS_THRESHOLD
                     break
 
-    except Exception:
+    except Exception as exc:
         # Silently fail episode per hackathon stdout rules
         success = False
         score = 0.0
@@ -326,8 +374,8 @@ async def run_one_task(client: OpenAI, task: str) -> None:
             try:
                 await env.close()
             except Exception as e:
-                print(f"[DEBUG] env.close(): {e}", flush=True)
-        log_end(success=success, steps=steps_taken, score=score, rewards=rewards)
+                pass
+        log_end(task, success=success, steps=steps_taken, score=score, rewards=rewards)
 
 
 # ---------------------------------------------------------------------------
@@ -342,8 +390,23 @@ async def main() -> None:
         )
     client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
 
+    append_traj = os.getenv("SUPPORT_TRIAGE_TRAJECTORY_APPEND", "").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+    if not append_traj:
+        for path in (TRAJECTORY_LOG, TRAJECTORY_JSON):
+            try:
+                if os.path.exists(path):
+                    os.remove(path)
+            except OSError:
+                pass
+
     for task in TASKS:
         await run_one_task(client, task)
+
+    write_trajectory_json_snapshot()
 
 
 if __name__ == "__main__":
